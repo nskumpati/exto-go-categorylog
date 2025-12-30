@@ -1,0 +1,79 @@
+trigger:
+  - dev
+
+pr:
+  branches:
+    include:
+      - dev
+
+variables:
+  dockerRegistryServiceConnection: "gaeadev.azurecr.io" # Docker service connection identifier
+  vmImageName: "ubuntu-22.04" # name of your VM
+  envName: "gt-ex-dev-aks-01" # name of your environment
+  resourceName: "platformdev" # name of the resource you are referencing
+  dockerfilePath: "server/Dockerfile"
+  tag: "$(Build.BuildNumber)" # tag added for your build
+  k8sNamespace: "platformdev" # namespace used in your PR
+  imagePullSecret: "exto-dev-pull-secret" # image pull secret
+  imageRepository: "exto-api-platformdev" # name of image repository
+  containerRegistry: "gaeadev.azurecr.io" # path to container registry
+  node_env: "test"
+
+stages:
+  - stage: BuildAndDeploy
+    displayName: Build And Deploy stage
+    jobs:
+      - job: Build
+        displayName: Build job
+        pool:
+          vmImage: $(vmImageName)
+        steps:
+          - task: Docker@2
+            displayName: Login to ACR
+            inputs:
+              command: login
+              containerRegistry: $(containerRegistry)
+          - task: CmdLine@2
+            displayName: Build Docker Image
+            inputs:
+              script: |
+                cd server
+                docker build -t $(containerRegistry)/$(imageRepository):$(tag) .
+          - task: Docker@2
+            displayName: Push Docker Image
+            # condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+            inputs:
+              command: push
+              containerRegistry: $(dockerRegistryServiceConnection)
+              repository: $(imageRepository)
+              tags: |
+                $(tag)
+          - task: PublishPipelineArtifact@1
+            # condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+            inputs:
+              artifactName: "manifests"
+              path: "ci/platformdev"
+
+      - deployment: Deploy
+        dependsOn: Build
+        displayName: Deploy job
+        # condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+        pool:
+          vmImage: $(vmImageName)
+        environment: "$(envName).$(resourceName)"
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: KubernetesManifest@0
+                  displayName: Deploy to Kubernetes cluster
+                  inputs:
+                    action: deploy
+                    namespace: $(k8sNamespace)
+                    manifests: |
+                      $(Pipeline.Workspace)/manifests/deployment.yml
+                      $(Pipeline.Workspace)/manifests/service.yml
+                    imagePullSecrets: |
+                      $(imagePullSecret)
+                    containers: |
+                      $(containerRegistry)/$(imageRepository):$(tag)

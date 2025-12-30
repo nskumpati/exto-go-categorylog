@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: exto-api-platformdev
+  namespace: platformdev
+  labels:
+    app.exto/component: exto-api
+    app.kubernetes.io/instance: platformdev
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: exto
+  annotations:
+    deployment.kubernetes.io/revision: "2"
+    meta.helm.sh/release-name: platformdev
+    meta.helm.sh/release-namespace: platformdev
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.exto/component: exto-api
+      app.kubernetes.io/instance: platformdev
+      app.kubernetes.io/name: exto
+  template:
+    metadata:
+      labels:
+        app.exto/component: exto-api
+        app.kubernetes.io/instance: platformdev
+        app.kubernetes.io/name: exto
+    spec:
+      containers:
+        - name: exto-api
+          image: gaeadev.azurecr.io/exto-api-platformdev:20250807.4
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 7070
+              name: http
+              protocol: TCP
+          env:
+            - name: PORT
+              value: "7070"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  key: exto-database
+                  name: exto-platformdev-db
+            - name: GOOGLE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  key: googleClientId
+                  name: exto-platformdev-google-client
+            - name: GOOGLE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  key: googleClientSecret
+                  name: exto-platformdev-google-client
+            - name: GOOGLE_MOBILE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  key: googleMobileClientId
+                  name: exto-platformdev-google-client
+
+---
+
